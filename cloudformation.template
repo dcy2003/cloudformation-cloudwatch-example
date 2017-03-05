@@ -56,6 +56,12 @@
                  "DeleteOnTermination" : "true",
                  "VolumeSize" : "8"
               }
+            },
+            {
+              "DeviceName" : "/dev/sda1",
+              "Ebs" : {
+                "DeleteOnTermination" : "true"
+              }
             }
         ],
         "SecurityGroupIds" : [ { "Ref" : "SecurityGroup" } ],
