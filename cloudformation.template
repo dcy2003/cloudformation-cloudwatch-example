@@ -1,0 +1,127 @@
+{
+  "Description" : "Launch an EC2 instance and send logs and system metrics to CloudWatch",
+
+  "Parameters": {
+
+    "SshFromIp" : {
+			"Description" : "The IP from which to allow SSH access",
+			"Type" : "String",
+			"MinLength" : "7",
+			"MaxLength" : "15",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+			"ConstraintDescription" : "must be a valid IP of the form x.x.x.x"
+    },
+
+    "KeyName" : {
+    	"Description" : "The name of the key pair that will be used to SSH into EC2 instances",
+    	"Type" : "AWS::EC2::KeyPair::KeyName",
+    	"ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+    },
+
+    "ExistingVpcId" : {
+      "Description" : "The ID of an existing VPC in the desired region",
+      "Type" : "AWS::EC2::VPC::Id",
+      "ConstraintDescription" : "must be the ID of an existing VPC in the format vpc-xxxxxxxx"
+    },
+
+    "InstanceType" : {
+    	"Description" : "The instance type",
+    	"Type" : "String",
+    	"Default" : "t2.micro",
+    	"AllowedValues" : [ "t2.micro" ]
+    }
+
+  },
+
+  "Mappings" : {
+    "RegionToAmiMap" : {
+      "us-west-2" : { "AmiId" : "ami-d2c924b2", "SshUser" : "centos" }
+    }
+  },
+
+  "Resources": {
+
+    "CloudWatchExampleInstance": {
+      "Type" : "AWS::EC2::Instance",
+      "Properties" : {
+        "ImageId" : { "Fn::FindInMap" : [ "RegionToAmiMap", { "Ref" : "AWS::Region" }, "AmiId" ] },
+        "InstanceType" : { "Ref" : "InstanceType" },
+        "KeyName" : { "Ref" : "KeyName" },
+        "Monitoring" : "true",
+        "BlockDeviceMappings" : [
+            {
+              "DeviceName" : "/dev/xvda",
+              "Ebs" : {
+                 "VolumeType" : "gp2",
+                 "DeleteOnTermination" : "true",
+                 "VolumeSize" : "8"
+              }
+            }
+        ],
+        "SecurityGroupIds" : [ { "Ref" : "SecurityGroup" } ],
+        "Tags" : [ {
+          "Key" : "Name",
+          "Value" : "CloudWatchExampleInstance"
+        } ]
+      }
+    },
+
+		"SecurityGroup" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"GroupDescription" : "Enable SSH access via port 22 and all internal communication within VPC",
+				"VpcId" : { "Ref" : "ExistingVpcId" },
+				"Tags" : [ { "Key" : "StackId", "Value" : { "Ref" : "AWS::StackId" } } ]
+			}
+		},
+
+		"AllowAllInternalIngress" : {
+			"Type" : "AWS::EC2::SecurityGroupIngress",
+			"Properties" : {
+				"IpProtocol" : "-1",
+				"FromPort" : "-1",
+				"ToPort" : "-1",
+				"SourceSecurityGroupId" : { "Ref" : "SecurityGroup" },
+				"GroupId" : { "Ref" : "SecurityGroup" }
+			}
+		},
+
+		"AllowSshIngressFromMyIP" : {
+			"Type" : "AWS::EC2::SecurityGroupIngress",
+			"Properties" : {
+				"IpProtocol" : "tcp",
+				"FromPort" : "22",
+				"ToPort" : "22",
+				"CidrIp" : { "Fn::Join" : [ "/", [{ "Ref" : "SshFromIp" }, "32"]]},
+				"GroupId" : { "Ref" : "SecurityGroup" }
+			}
+		},
+
+		"AllowAllEgress" : {
+			"Type" : "AWS::EC2::SecurityGroupEgress",
+			"Properties" : {
+				"IpProtocol" : "-1",
+				"FromPort" : "-1",
+				"ToPort" : "-1",
+				"CidrIp" : "0.0.0.0/0",
+				"GroupId" : { "Ref" : "SecurityGroup" }
+			}
+		}
+
+  },
+
+  "Outputs" : {
+
+    "InstanceID" : {
+      "Description": "The Instance ID",
+      "Value" : { "Ref" : "CloudWatchExampleInstance" }
+    },
+
+    "SecurityGroupId" : {
+      "Description": "The Security Group ID",
+      "Value" : { "Ref" : "SecurityGroup" }
+    }
+
+  }
+
+}
