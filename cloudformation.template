@@ -41,11 +41,166 @@
 
   "Resources": {
 
+    "LogRole" : {
+			"Type" : "AWS::IAM::Role",
+			"Properties" : {
+				"AssumeRolePolicyDocument" : {
+					"Statement" : [
+						{
+							"Effect" : "Allow",
+							"Principal" : {
+								"Service" : [ "ec2.amazonaws.com" ]
+							},
+							"Action" : [ "sts:AssumeRole" ]
+						}
+					]
+				},
+				"Path" : "/"
+			}
+		},
+
+    "LogRolePolicy" : {
+			"Type" : "AWS::IAM::Policy",
+			"Properties" : {
+				"PolicyName": "LogRolePolicy",
+				"PolicyDocument" : {
+					"Statement" : [
+						{
+							"Effect" : "Allow",
+							"Action" : [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogStreams"
+							],
+							"Resource" : "arn:aws:logs:*:*:*"
+						}
+					]
+				},
+				"Roles" : [ { "Ref" : "LogRole" } ]
+			}
+		},
+
+    "LogRoleInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [ { "Ref": "LogRole" } ]
+      }
+    },
+
+    "CloudFormationLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "RetentionInDays": 14
+      }
+    },
+
     "CloudWatchExampleInstance": {
       "Type" : "AWS::EC2::Instance",
+      "Metadata" : {
+        "AWS::CloudFormation::Init" : {
+          "configSets" : {
+            "install_all" : [ "install_cfn", "install_logs" ]
+          },
+          "install_cfn" : {
+            "files" : {
+              "/etc/cfn/cfn-hup.conf" : {
+                "content" : { "Fn::Join" : ["", [
+                  "[main]\n",
+                  "stack=", { "Ref" : "AWS::StackId" }, "\n",
+                  "region=", { "Ref" : "AWS::Region" }, "\n"
+                ]]},
+                "mode"    : "000400",
+                "owner"   : "root",
+                "group"   : "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+                "content": { "Fn::Join" : ["", [
+                  "[cfn-auto-reloader-hook]\n",
+                  "triggers=post.update\n",
+                  "path=Resources.CloudWatchExampleInstance.Metadata.AWS::CloudFormation::Init\n",
+                  "action=/opt/aws/bin/cfn-init -v ",
+                  "         --stack ", { "Ref" : "AWS::StackName" },
+                  "         --resource CloudWatchExampleInstance ",
+                  "         --configsets install_all ",
+                  "         --region ", { "Ref" : "AWS::Region" }, "\n",
+                  "runas=root\n"
+                ]]}
+              }
+            },
+            "services" : {
+              "sysvinit" : {
+                "cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
+                              "files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]}
+              }
+            }
+          },
+          "install_logs" : {
+            "files": {
+              "/etc/awslogs/awslogs.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[general]\n",
+                  "state_file= /var/awslogs/state/agent-state\n",
+
+                  "[/var/log/cloud-init.log]\n",
+                  "file = /var/log/cloud-init.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cloud-init.log\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/cloud-init-output.log]\n",
+                  "file = /var/log/cloud-init-output.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cloud-init-output.log\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/cfn-init.log]\n",
+                  "file = /var/log/cfn-init.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cfn-init.log\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/cfn-hup.log]\n",
+                  "file = /var/log/cfn-hup.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cfn-hup.log\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/cfn-wire.log]\n",
+                  "file = /var/log/cfn-wire.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cfn-wire.log\n",
+                  "datetime_format = \n"
+                ] ] },
+                "mode": "000444",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/awslogs/awscli.conf": {
+                "content": { "Fn::Join": [ "", [
+                  "[plugins]\n",
+                  "cwlogs = cwlogs\n",
+                  "[default]\n",
+                  "region = ", { "Ref" : "AWS::Region" }, "\n"
+                ] ] },
+                "mode": "000444",
+                "owner": "root",
+                "group": "root"
+              }
+            },
+            "commands" : {
+              "01_create_state_directory" : {
+                "command" : "mkdir -p /var/awslogs/state"
+              }
+            }
+          }
+        }
+      },
       "Properties" : {
         "ImageId" : { "Fn::FindInMap" : [ "RegionToAmiMap", { "Ref" : "AWS::Region" }, "AmiId" ] },
         "InstanceType" : { "Ref" : "InstanceType" },
+        "IamInstanceProfile" : { "Ref" : "LogRoleInstanceProfile" },
         "KeyName" : { "Ref" : "KeyName" },
         "Monitoring" : "true",
         "BlockDeviceMappings" : [
@@ -68,7 +223,63 @@
         "Tags" : [ {
           "Key" : "Name",
           "Value" : "CloudWatchExampleInstance"
-        } ]
+        } ],
+        "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+          "#!/bin/bash -xe\n",
+
+          "yum install epel-release -y\n",
+          "yum install python-pip -y\n",
+
+          "pip install pystache\n",
+          "pip install argparse\n",
+          "pip install python-daemon\n",
+          "pip install --upgrade --user awscli\n",
+          "pip install requests\n",
+
+          "ln -s /root/.local/bin/aws /usr/bin/aws\n",
+
+          "cd /opt\n",
+          "curl -O https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+          "tar -xvpf aws-cfn-bootstrap-latest.tar.gz\n",
+          "cd aws-cfn-bootstrap-1.4/\n",
+          "python setup.py build\n",
+          "python setup.py install\n",
+          "ln -s /usr/init/redhat/cfn-hup /etc/init.d/cfn-hup\n",
+          "chmod 775 /usr/init/redhat/cfn-hup\n",
+          "cd /opt\n",
+          "mkdir aws\n",
+          "cd aws\n",
+          "mkdir bin\n",
+          "ln -s /usr/bin/cfn-hup /opt/aws/bin/cfn-hup\n",
+          "ln -s /usr/bin/cfn-init /opt/aws/bin/cfn-init\n",
+          "ln -s /usr/bin/cfn-signal /opt/aws/bin/cfn-signal\n",
+          "ln -s /usr/bin/cfn-elect-cmd-leader /opt/aws/bin/cfn-elect-cmd-leader\n",
+          "ln -s /usr/bin/cfn-get-metadata /opt/aws/bin/cfn-get-metadata\n",
+          "ln -s /usr/bin/cfn-send-cmd-event /opt/aws/bin/cfn-send-cmd-event\n",
+          "ln -s /usr/bin/cfn-send-cmd-result /opt/aws/bin/cfn-send-cmd-result\n",
+
+          "cd /opt\n",
+          "curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O\n",
+          "chmod +x awslogs-agent-setup.py\n",
+
+          "/opt/aws/bin/cfn-init -v ",
+          "         --stack ", { "Ref" : "AWS::StackName" },
+          "         --resource CloudWatchExampleInstance ",
+          "         --configsets install_all ",
+          "         --region ", { "Ref" : "AWS::Region" }, "\n",
+
+          "./awslogs-agent-setup.py -n -r ", { "Ref" : "AWS::Region" }, " -c /etc/awslogs/awslogs.conf\n",
+          
+          "/opt/aws/bin/cfn-signal -e $? ",
+          "         --stack ", { "Ref" : "AWS::StackName" },
+          "         --resource CloudWatchExampleInstance ",
+          "         --region ", { "Ref" : "AWS::Region" }, "\n"
+        ]]}},
+        "CreationPolicy" : {
+          "ResourceSignal" : {
+            "Timeout" : "PT15M"
+          }
+        }
       }
     }
 
