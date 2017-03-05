@@ -6,4 +6,4 @@ aws cloudformation create-stack \
   --parameters \
     ParameterKey=SshFromIp,ParameterValue=`curl -s http://whatismyip.akamai.com/` \
     ParameterKey=KeyName,ParameterValue=asc-oregon \
-    ParameterKey=ExistingVpcId,ParameterValue=vpc-3fcf485b
+    ParameterKey=ExistingSecurityGroupId,ParameterValue=sg-960427ee
