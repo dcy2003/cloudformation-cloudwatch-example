@@ -274,7 +274,7 @@
           "         --stack ", { "Ref" : "AWS::StackName" },
           "         --resource CloudWatchExampleInstance ",
           "         --region ", { "Ref" : "AWS::Region" }, "\n"
-        ]]}},
+        ]]}}
       },
       "CreationPolicy" : {
         "ResourceSignal" : {
