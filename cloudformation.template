@@ -2,7 +2,6 @@
   "Description" : "Launch an EC2 instance and send logs and system metrics to CloudWatch",
 
   "Parameters": {
-
     "SshFromIp" : {
 			"Description" : "The IP from which to allow SSH access",
 			"Type" : "String",
@@ -11,26 +10,22 @@
 			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
 			"ConstraintDescription" : "must be a valid IP of the form x.x.x.x"
     },
-
     "KeyName" : {
     	"Description" : "The name of the key pair that will be used to SSH into EC2 instances",
     	"Type" : "AWS::EC2::KeyPair::KeyName",
     	"ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
     },
-
     "ExistingSecurityGroupId" : {
       "Description" : "The ID of an existing security group in the desired region",
       "Type" : "AWS::EC2::SecurityGroup::Id",
       "ConstraintDescription" : "must be the ID of an existing VPC in the format sg-xxxxxxxx"
     },
-
     "InstanceType" : {
     	"Description" : "The instance type",
     	"Type" : "String",
     	"Default" : "t2.micro",
     	"AllowedValues" : [ "t2.micro" ]
     }
-
   },
 
   "Mappings" : {
@@ -77,6 +72,25 @@
 						}
 					]
 				},
+				"Roles" : [ { "Ref" : "LogRole" } ]
+			}
+		},
+
+    "CustomMetricPolicy" : {
+			"Type" : "AWS::IAM::Policy",
+			"Properties" : {
+				"PolicyName": "CustomMetricPolicy",
+				"PolicyDocument" : {
+          "Statement": [
+              {
+                  "Effect": "Allow",
+                  "Action": [
+                      "cloudwatch:PutMetricData"
+                  ],
+                  "Resource": "*"
+              }
+          ]
+        },
 				"Roles" : [ { "Ref" : "LogRole" } ]
 			}
 		},
@@ -143,6 +157,42 @@
                   "[general]\n",
                   "state_file= /var/awslogs/state/agent-state\n",
 
+                  "[/var/log/messages]\n",
+                  "file = /var/log/messages\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/messages\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/wtmp]\n",
+                  "file = /var/log/wtmp\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/wtmp\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/cron]\n",
+                  "file = /var/log/cron\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/cron\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/boot.log]\n",
+                  "file = /var/log/boot.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/boot.log\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/secure]\n",
+                  "file = /var/log/secure\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/secure\n",
+                  "datetime_format = \n",
+
+                  "[/var/log/yum.log]\n",
+                  "file = /var/log/yum.log\n",
+                  "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
+                  "log_stream_name = {instance_id}/yum.log\n",
+                  "datetime_format = \n",
+
                   "[/var/log/cloud-init.log]\n",
                   "file = /var/log/cloud-init.log\n",
                   "log_group_name = ", { "Ref": "CloudFormationLogs" }, "\n",
@@ -187,6 +237,15 @@
                 "mode": "000444",
                 "owner": "root",
                 "group": "root"
+              },
+              "/opt/report-custom-metrics.sh" : {
+                "content": { "Fn::Join": [ "", [
+                  "#!/bin/bash\n",
+                  "/opt/aws-scripts-mon/mon-put-instance-data.pl --mem-util --mem-used --mem-avail --swap-util --swap-used --disk-space-util --disk-space-used --disk-space-avail --memory-units=megabytes --disk-space-units=gigabytes --disk-path=/dev/xvda1 --from-cron\n"
+                ] ] },
+                "mode": "000744",
+                "owner": "root",
+                "group": "root"
               }
             },
             "commands" : {
@@ -228,7 +287,7 @@
           "#!/bin/bash -xe\n",
 
           "yum install epel-release -y\n",
-          "yum install python-pip -y\n",
+          "yum install python-pip unzip wget perl-Switch perl-DateTime perl-Sys-Syslog perl-LWP-Protocol-https perl-Digest-SHA.x86_64 -y\n",
 
           "pip install pystache\n",
           "pip install argparse\n",
@@ -259,6 +318,10 @@
           "ln -s /usr/bin/cfn-send-cmd-result /opt/aws/bin/cfn-send-cmd-result\n",
 
           "cd /opt\n",
+
+          "curl http://aws-cloudwatch.s3.amazonaws.com/downloads/CloudWatchMonitoringScripts-1.2.1.zip -O\n",
+          "unzip CloudWatchMonitoringScripts-1.2.1.zip\n",
+
           "curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -O\n",
           "chmod +x awslogs-agent-setup.py\n",
 
@@ -268,6 +331,7 @@
           "         --configsets install_all ",
           "         --region ", { "Ref" : "AWS::Region" }, "\n",
 
+          "echo \"*/1 * * * * root /opt/report-custom-metrics.sh\" >> /etc/crontab\n",
           "./awslogs-agent-setup.py -n -r ", { "Ref" : "AWS::Region" }, " -c /etc/awslogs/awslogs.conf\n",
 
           "/opt/aws/bin/cfn-signal -e $? ",
@@ -282,16 +346,17 @@
         }
       }
     }
-
   },
 
   "Outputs" : {
-
     "InstanceID" : {
       "Description": "The Instance ID",
       "Value" : { "Ref" : "CloudWatchExampleInstance" }
+    },
+    "CloudFormationLogsId" : {
+      "Description" : "The ID of the LogGroup",
+      "Value" : { "Ref" : "CloudFormationLogs" }
     }
-
   }
 
 }
