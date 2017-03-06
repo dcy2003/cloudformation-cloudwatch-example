@@ -2,14 +2,6 @@
   "Description" : "Launch an EC2 instance and send logs and system metrics to CloudWatch",
 
   "Parameters": {
-    "SshFromIp" : {
-			"Description" : "The IP from which to allow SSH access",
-			"Type" : "String",
-			"MinLength" : "7",
-			"MaxLength" : "15",
-			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
-			"ConstraintDescription" : "must be a valid IP of the form x.x.x.x"
-    },
     "KeyName" : {
     	"Description" : "The name of the key pair that will be used to SSH into EC2 instances",
     	"Type" : "AWS::EC2::KeyPair::KeyName",

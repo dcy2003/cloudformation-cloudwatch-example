@@ -37,3 +37,4 @@ Spins up an EC2 instance via CloudFormation and demonstrates how to do the follo
 * http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-init.html
 * http://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/EC2NewInstanceCWL.html
 * http://www.danieleyer.com/blog/2016/07/15/adding-aws-cfn-bootstrap-cloudformation-helper-scripts-to-custom-linux-amis/
+* http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/mon-scripts.html
